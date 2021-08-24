@@ -5,6 +5,8 @@ from pygame.sprite import Sprite, Group
 import os
 from abc import ABC, abstractmethod
 
+from typing import Iterable, Optional, Union
+
 import utils
 
 
@@ -36,7 +38,7 @@ class Menu(UIGroup):
             game=self.game,
             button_name='startbutton',
             function=self.game.toggle_menu,
-            scale=.35,
+            scale=.25,
             center=self.game.play_area.center,
         )
         self.add(start_button)
@@ -155,26 +157,24 @@ class ScoreDisplay(UIElement):
         self._build()
 
     def update(self) -> None:
-        if self.score != self.game.bird.score:
-            self.score = self.game.bird.score
+        bird_score: int = self.game.bird.score
+
+        if self.score != bird_score:
+            self.score = bird_score
 
             # load digit surfaces into list in the order they appear in score
-            digits_to_print = []
-            for n in str(self.score):
-                digits_to_print.append(self.digits[n])
+            digits_to_print = [self.digits[n] for n in str(self.score)]
 
-            # resize surface to fit all digits
-            new_size = (
-                sum(image.get_width() + 2 for image in digits_to_print),
-                self.rect.height
-            )
-            self.image = pg.Surface(new_size, pg.SRCALPHA)
-            self.rect = self.image.get_rect(**self.rect_position)
+            # resize surface to fit all digits with some space between digits
+            new_width = sum(image.get_width() + 2 for image in digits_to_print)
+            self.image = pg.Surface((new_width, self.rect.h), pg.SRCALPHA)
+            self.rect = self.image.get_rect(center=self.rect.center)
 
             # blit digits to self using their order to space them.
+            digit_width = digits_to_print[0].get_width()
             for i, digit in enumerate(digits_to_print):
-                rect = digit.get_rect(left=digit.get_width() * i)
-                if 0 < rect.left < self.rect.w:
+                rect = digit.get_rect(left=digit_width * i)
+                if rect.left > 0:
                     rect.left += 1  # add buffer between letters
                 self.image.blit(digit, rect)
 
@@ -184,8 +184,8 @@ class ScoreDisplay(UIElement):
 
         digit_images = utils.make_all_same_size(digits.values())
         digit_images = [
-            utils.scale_image(img, self.scale, self.game.rect.w)
-            for img in digit_images
+            utils.scale_image(digit, self.scale, self.game.rect.w)
+            for digit in digit_images
         ]
         self.digits = {
             k: v for k, v in zip(digits.keys(), digit_images)

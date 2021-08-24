@@ -20,6 +20,9 @@ class Game:
     wh_ratio = 9 / 16
 
     def __init__(self):
+        pg.mixer.init()
+        print()
+
         pg.display.set_caption('FlapPyGame')
         pg.display.set_icon(load_image('icon'))
         self.clock = pg.time.Clock()
@@ -45,24 +48,29 @@ class Game:
         self.in_game = False
         self.pipes = PipeSpawner(self)
         self.bird = Bird(self)
-
         self.events = EventHandler(self)
         self.menu_ui = ui.Menu(self)
         self.in_game_ui = ui.Overlays(self)
 
     def toggle_menu(self):
-        self.in_game = not self.in_game
+        if self.in_game:
+            self.in_game = False
+        elif self.bird.is_alive:
+            self.in_game = True
+        else:
+            self.bird.revive()
+            self.pipes.reset()
 
     def run(self):
         while True:
-            dt = self.clock.tick(40) / 1000
+            dt = self.clock.tick(35) / 1000
             self.events.check_events()
             self._update(dt)
             self._draw()
 
     def _update(self, dt):
+        self.bird.update(dt)
         if self.in_game:
-            self.bird.update(dt)
             self.pipes.update(dt=dt)
         else:
             self.menu_ui.update(
@@ -95,14 +103,18 @@ class EventHandler:
     def __init__(self, game):
         self.game = game
 
-        self.mouse_down_position = (-1, -1)
-        self.mouse_up_position = (-1, -1)
         self.mouse_down = False
+        # position where mouse is currently clicking
+        self.mouse_down_position = None
+        # position where mouse is currently unclicking
+        self.mouse_up_position = None
 
     def check_events(self):
         # reset mouse positions
-        self.mouse_up_position = None
-        self.mouse_down_position = None
+        if self.mouse_up_position:
+            self.mouse_up_position = None
+        if self.mouse_down_position:
+            self.mouse_down_position = None
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -114,7 +126,7 @@ class EventHandler:
 
     def _keyboard(self, event):
         if event.type == pg.KEYDOWN:
-            if event.key == pg.K_SPACE:
+            if self.game.in_game and event.key == pg.K_SPACE:
                 self.game.bird.flap_up()
             elif event.key == pg.K_ESCAPE:
                 self.game.toggle_menu()

@@ -4,8 +4,10 @@ Module to represent moving pipe obstacles that move towards the player.
 
 import pygame as pg
 from pygame.sprite import Sprite, Group
+
 import random
 from collections import deque
+from copy import deepcopy
 
 from typing import Optional
 
@@ -29,9 +31,11 @@ class PipeSpawner(Group):
         self.image_pool = utils.load_images(query='pipe')
         self.pipe_image = self._get_pipe_image()
 
-        self.pipe_gap_height = int(self.game.rect.h * .25)
-        self.pipe_spacing = int(self.game.rect.w * .35)
+        self.pipe_gap_height = int(self.game.rect.h * .22)
+        self.pipe_spacing = int(self.game.rect.w * .42)
         self.pipe_vel_x = int(self.game.rect.w * -.33)
+
+        self.state_memory = SpawnerStateMemory(self)
 
     def update(self, dt) -> None:
         # check if another pipe should be spawned in waiting
@@ -49,7 +53,14 @@ class PipeSpawner(Group):
         if abs(last_pipe_right - next_pipe_left) > self.pipe_spacing:
             self._move_next_pipe()
 
+        # UPDATE ALL PIPES
         super().update(dt)
+
+    def reset(self):
+        self.total_spawned = 0
+        self.waiting_pipes.clear()
+        self.moving_pipes.clear()
+        self.empty()
 
     def _get_pipe_image(self, color: Optional[str] = '') -> Image:
         """
@@ -63,8 +74,8 @@ class PipeSpawner(Group):
         for name, img in self.image_pool.items():
             if color in name:
                 image = img.copy()
-                height = self.game.rect.h * 0.625
-                return utils.scale_image(image, 1, height, 'h')
+                height = self.game.rect.h
+                return utils.scale_image(image, 0.625, height, 'h')
         else:
             raise ValueError(
                 f"Could not find '{color}' in pipe image pool keys"
@@ -73,7 +84,7 @@ class PipeSpawner(Group):
     def _spawn_new_pipe(self):
         gap_bottom_y = random.randrange(
             start=self.pipe_gap_height,
-            stop=self.game.rect.h - self.game.floor.rect.h
+            stop=self.game.floor.rect.top
         )
         pipe = Pipe(self, gap_bottom_y)
         self.total_spawned += 1
@@ -81,24 +92,28 @@ class PipeSpawner(Group):
         self.add(pipe)
 
     def _move_next_pipe(self):
-        pipe = self.waiting_pipes.popleft()
-        pipe.is_moving = True
-        self.moving_pipes.append(pipe)
+        self.moving_pipes.append(self.waiting_pipes.popleft())
+        self.moving_pipes[-1].is_moving = True
 
 
 class Pipe(Sprite):
-    def __init__(self, spawner: PipeSpawner, gap_bottom_y):
+    def __init__(self, spawner: PipeSpawner, gap_bottom_y, point_value: int = 1):
         """
         A Pipe represents the upper and lower portion of a pipe obstacle.
 
         """
+        # sprite init
         super().__init__()
+
+        # parent reference
         self.spawner = spawner
 
-        self.rect = self._create_rect()
-        self.image = self._render_image()
+        # used for scoring
+        self.point_value: int = point_value
+        self.counted: bool = False
 
         # position
+        self.rect = self._create_rect()
         self.rect.bottom = gap_bottom_y + spawner.pipe_image.get_rect().h
         self.rect.x = spawner.game.rect.right
         self.x, self.y = self.rect.topleft
@@ -107,12 +122,11 @@ class Pipe(Sprite):
         self.is_moving = False
         self.vel_x = spawner.pipe_vel_x
 
+        # image
+        self.image = self._render_image()
+
         # mask collision
         self.mask = pg.mask.from_surface(self.image, 15)
-
-        # used for scoring
-        self.score_value: int = 1
-        self.counted: bool = False
 
     def update(self, dt: float) -> None:
         if self.is_moving:
@@ -120,7 +134,7 @@ class Pipe(Sprite):
             self.rect.x = self.x
 
         # delete pipe that has gone off-screen
-        if self.rect.right < self.spawner.game.rect.left:
+        if self.rect.right < 0:
             self.kill()  # bye bye pipy
 
     def _create_rect(self) -> pg.Rect:
@@ -128,8 +142,8 @@ class Pipe(Sprite):
         create a rectangle that will fit the pipe obstacle
         """
         rect = self.spawner.pipe_image.get_rect()
-        rect.h *= 2
-        rect.h += self.spawner.pipe_gap_height
+        rect.h *= 2  # double height to fit 2 pipes
+        rect.h += self.spawner.pipe_gap_height  # increase height to fit gap
 
         return rect
 
@@ -145,7 +159,31 @@ class Pipe(Sprite):
         pipe_top_img = pg.transform.rotate(pipe_image, 180)
 
         image.blits([
-            (pipe_btm_img, pipe_image.get_rect(bottomleft=self.rect.bottomleft)),
-            (pipe_top_img, pipe_image.get_rect(topleft=self.rect.topleft))
+            (pipe_top_img, pipe_image.get_rect(topleft=(0, 0))),
+            (pipe_btm_img, pipe_image.get_rect(bottom=self.rect.h))
         ])
         return image
+
+
+class SpawnerStateMemory:
+    """
+    Class to represent state data about the bird at init (for resetting after
+    death)
+    """
+    def __init__(self, spawner: PipeSpawner):
+        self.spawner = spawner
+
+        attrs = [
+            'waiting_pipes', 'moving_pipes', 'total_spawned',
+            'pipe_gap_height', 'pipe_spacing', 'pipe_vel_x'
+        ]
+
+        for attr_name in attrs:
+            spawner_attr = spawner.__dict__[attr_name]
+
+            spawner_attr = deepcopy(spawner_attr)
+
+            self.__dict__[attr_name] = spawner_attr
+
+    def reset_pipes(self) -> None:
+        self.spawner.__dict__.update(self.__dict__)

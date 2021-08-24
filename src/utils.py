@@ -10,9 +10,15 @@ Image = pg.Surface
 Images = Iterable[pg.Surface]
 Checkbox = Optional[bool]
 Sizehint = Union[int, float]
+Sound = pg.mixer.Sound
+KwargName = str
+Position = Iterable[Union[int, float]]
+KwargValue = Union[int, float, Position]
+RectPositionKwargs = dict[KwargName, KwargValue]
 
 # Globals
 IMG_FOLDER_PATH = os.path.join('..', 'img')
+AUDIO_FOLDER_PATH = os.path.join('..', 'audio')
 
 
 def load_image(query: str, convert_alpha: Checkbox = True
@@ -27,7 +33,8 @@ def load_image(query: str, convert_alpha: Checkbox = True
         if query in fn:
             file_path = os.path.join(folder_path, fn)
             img = pg.image.load(file_path)
-            img_name = fn.split('.')[0]
+
+            print(f"{__name__} load image {file_path}")
 
             return convert_image(img, convert_alpha)
 
@@ -62,6 +69,8 @@ def load_images(
                 img = pg.image.load(file_path)
                 img_name = fn.split('.')[0]
                 images[img_name] = convert_image(img, convert_alpha)
+
+    print(f"{__name__} load images {', '.join(k for k in images.keys())}")
 
     return images
 
@@ -118,16 +127,43 @@ def scale_image(
     return pg.transform.scale(image, (w, h))
 
 
-def make_all_same_size(images):
+def make_all_same_size(images: Images):
     """
-    Take in a container of images and make them all the same size. If no
-    size argument is given, the images will take on the size and ratio which
-    is most common among the given Images.
+    Take in a container of images and make them all the same size. The Images
+    will take on the size which is most common among the given Images.
     """
-    sizes = Counter(image.get_size() for image in images)
-    size = sizes.most_common(1)[0][0]
+    def resize_images() -> Images:
+        for surf in images:
+            yield pg.transform.scale(surf, (w, h))
 
-    return tuple(pg.transform.scale(img, size) for img in images)
+    # get most common size
+    sizes = Counter(image.get_size() for image in images)
+    w, h = sizes.most_common()[0][0]
+
+    return tuple( resize_images())
+
+
+def load_sounds(sound_names: Iterable[str]) -> dict[str, Sound]:
+    """
+        Loads sounds into a dictionary. You must specify sound names.
+         If no matches are found, an empty dict is returned.
+    """
+    folder_path = AUDIO_FOLDER_PATH
+    extension = '.wav'
+
+    sounds = {}
+    for sound_name in sound_names:
+        file_path = os.path.join(folder_path, sound_name + extension)
+        sounds[sound_name] = pg.mixer.Sound(file_path)
+
+    print(f"{__name__} load sounds: {', '.join(sound_names)}")
+
+    return sounds
+
+
+def copy_rect(rect: pg.Rect, **positions_args: RectPositionKwargs):
+    """"""
+    pass
 
 
 class StaticImage:
