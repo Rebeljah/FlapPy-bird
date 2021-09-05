@@ -7,7 +7,6 @@ from pygame.sprite import Sprite, Group
 
 import random
 from collections import deque
-from copy import deepcopy
 
 from typing import Optional
 
@@ -26,7 +25,6 @@ class PipeSpawner(Group):
 
         self.waiting_pipes = deque(maxlen=2)
         self.moving_pipes = deque()
-        self.total_spawned = 0
 
         self.image_pool = utils.load_images(query='pipe')
         self.pipe_image = self._get_pipe_image()
@@ -34,8 +32,6 @@ class PipeSpawner(Group):
         self.pipe_gap_height = int(self.game.rect.h * .22)
         self.pipe_spacing = int(self.game.rect.w * .42)
         self.pipe_vel_x = int(self.game.rect.w * -.33)
-
-        self.state_memory = SpawnerStateMemory(self)
 
     def update(self, dt) -> None:
         # check if another pipe should be spawned in waiting
@@ -57,10 +53,9 @@ class PipeSpawner(Group):
         super().update(dt)
 
     def reset(self):
-        self.total_spawned = 0
+        self.empty()
         self.waiting_pipes.clear()
         self.moving_pipes.clear()
-        self.empty()
 
     def _get_pipe_image(self, color: Optional[str] = '') -> Image:
         """
@@ -87,7 +82,6 @@ class PipeSpawner(Group):
             stop=self.game.floor.rect.top
         )
         pipe = Pipe(self, gap_bottom_y)
-        self.total_spawned += 1
         self.waiting_pipes.append(pipe)
         self.add(pipe)
 
@@ -135,7 +129,7 @@ class Pipe(Sprite):
 
         # delete pipe that has gone off-screen
         if self.rect.right < 0:
-            self.kill()  # bye bye pipy
+            self.kill()  # bye bye pipey
 
     def _create_rect(self) -> pg.Rect:
         """
@@ -163,27 +157,3 @@ class Pipe(Sprite):
             (pipe_btm_img, pipe_image.get_rect(bottom=self.rect.h))
         ])
         return image
-
-
-class SpawnerStateMemory:
-    """
-    Class to represent state data about the bird at init (for resetting after
-    death)
-    """
-    def __init__(self, spawner: PipeSpawner):
-        self.spawner = spawner
-
-        attrs = [
-            'waiting_pipes', 'moving_pipes', 'total_spawned',
-            'pipe_gap_height', 'pipe_spacing', 'pipe_vel_x'
-        ]
-
-        for attr_name in attrs:
-            spawner_attr = spawner.__dict__[attr_name]
-
-            spawner_attr = deepcopy(spawner_attr)
-
-            self.__dict__[attr_name] = spawner_attr
-
-    def reset_pipes(self) -> None:
-        self.spawner.__dict__.update(self.__dict__)

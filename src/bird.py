@@ -27,7 +27,7 @@ class Bird(Sprite):
         self.is_alive = True
         self.on_ground = False
         self.score = 0
-        self.game_awareness = BirdAwareness(self)  # collision and scoring
+
         self.sounds: dict = utils.load_sounds(
             sound_names=['hit', 'die', 'point', 'wing']
         )
@@ -35,29 +35,28 @@ class Bird(Sprite):
         # Images and rectangle
         self.animation_frames = deque(
             utils.scale_image(img, 0.118, self.game.rect.w, 'w')
-            for img in utils.load_sprite_frames(
-                sprite_name=self.sprite_name
-            )
+            for img in utils.load_images(query=sprite_name).values()
         )
 
         self.image = self.animation_frames[0].copy()
         self.rect = self.image.get_rect()
 
         # position / velocity
-        self.y = (game.rect.h - game.floor.rect.h) // 2
+        self.y = game.play_area.centery
         self.rect.y = self.y
-        self.rect.x = 0.10 * self.game.rect.w
+        self.rect.x = 0.10 * self.game.play_area.w
         self.vel_y = 0  # pps
 
         # movement settings
-        self.accel = 5.85 * self.game.rect.w  #
-        self.flap_vel_y = -1.4 * self.game.rect.w  # pps
-        self.max_vel_y = 1.91 * self.game.rect.w  #
+        self.accel = 5.85 * self.game.play_area.w  #
+        self.flap_vel_y = -1.4 * self.game.play_area.w  # pps
+        self.max_vel_y = 1.91 * self.game.play_area.w  #
         self.angle = 0  # default to no rotation
         self.max_angle = 45
 
-        self.update(dt=0)
+        self.game_awareness = GameAwareness(self)  # collision and scoring
         self.state_memory = BirdStateMemory(self)  # for resetting
+        self.update(dt=0)
 
     def update(self, dt):
         """
@@ -100,6 +99,10 @@ class Bird(Sprite):
         self.is_alive = not self.is_alive
 
     def revive(self):
+        """
+        Reset saved attributes from state memory. The bird's state memory is
+        then updated.
+        """
         if not self.is_alive:
             self.state_memory.reset_bird()
             self.state_memory = BirdStateMemory(self)
@@ -123,7 +126,7 @@ class Bird(Sprite):
         self.image = pg.transform.rotate(frame, self.angle)
 
 
-class BirdAwareness:
+class GameAwareness:
     def __init__(self, bird):
         self.bird = bird
         self.game = bird.game
@@ -146,20 +149,23 @@ class BirdAwareness:
         pipe: Pipe
         for pipe in self.game.pipes.moving_pipes:
             if (
-                    pipe.is_moving
-                    # bird has not passed pipe
-                    and self.game.rect.left < pipe.rect.right
-                     # bird is in or near pipe
-                    and pipe.rect.left - self.bird.rect.right < 5
-                    # bird pixels are overlapping pipe pixels
-                    and pg.sprite.collide_mask(self.bird, pipe)
+                # check if bird has passed pipe
+                self.game.rect.left < pipe.rect.right
+                # check if bird is in or near pipe
+                and pipe.rect.left - self.bird.rect.right < 5
+                # check if bird pixels are overlapping pipe pixels
+                and pg.sprite.collide_mask(self.bird, pipe)
             ):
+                # Bird hit pipe, proceed to die dramatically
                 self.bird.sounds['hit'].play()
                 self.bird.sounds['die'].play()
                 self.bird.max_angle = 90
                 self.bird.die()
 
     def update_score(self) -> None:
+        """
+        Increase the birds score when it clears a pipe.
+        """
         pipe: Pipe
         for pipe in self.game.pipes.moving_pipes:
             if (
@@ -172,21 +178,25 @@ class BirdAwareness:
 
 class BirdStateMemory:
     """
-    Class to represent state data about the bird at init (for resetting after
-    death)
+    BirdStateMemory objects copy attributes of the
+    bird after initialization. When the bird is dead, the required
+    attributes can be reset. Edit which attributes to copy by editing the
+    'attrs_to_save' list in __init__.
     """
     def __init__(self, bird: Bird):
         self.bird = bird
 
-        attrs = [
+        attrs_to_save = [
             'is_alive', 'on_ground', 'score', 'image', 'rect', 'y', 'vel_y',
             'angle', 'max_angle'
         ]
 
-        for attr_name in attrs:
+        for attr_name in attrs_to_save:
             bird_attr = bird.__dict__[attr_name]
 
-            if isinstance(bird_attr, (pg.Surface, pg.Rect)):
+            if isinstance(bird_attr, pg.Rect):
+                bird_attr = pg.Rect(bird_attr)
+            elif isinstance(bird_attr, pg.Surface):
                 bird_attr = bird_attr.copy()
 
             self.__dict__[attr_name] = bird_attr

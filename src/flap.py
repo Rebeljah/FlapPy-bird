@@ -7,7 +7,6 @@ our poor little flappy bird, so look out!.
 
 import pygame as pg
 import sys
-import random
 
 
 from bird import Bird
@@ -28,7 +27,7 @@ class Game:
         self.clock = pg.time.Clock()
 
         ratio = 288/512
-        h = int(720)
+        h = int(1000)
         w = int(ratio * h)
 
         self.screen = pg.display.set_mode((w, h))
@@ -50,7 +49,7 @@ class Game:
         self.bird = Bird(self)
         self.events = EventHandler(self)
         self.menu_ui = ui.Menu(self)
-        self.in_game_ui = ui.Overlays(self)
+        self.in_game_ui = ui.HUD(self)
 
     def toggle_menu(self):
         if self.in_game:
@@ -79,7 +78,7 @@ class Game:
                 self.events.mouse_down_position
             )
 
-        self.in_game_ui.update()
+        self.in_game_ui.update(self.bird.score)
 
     def _draw(self):
         self.screen.blit(self.background.image, self.background.rect)

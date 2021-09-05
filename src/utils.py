@@ -1,9 +1,10 @@
 import pygame as pg
+
 import os
-from collections import deque, Counter
+from collections import Counter
 
 
-from typing import Iterable, Optional, Union, Container
+from typing import Iterable, Optional, Union
 # Typing
 Filenames = Iterable[str]
 Image = pg.Surface
@@ -15,6 +16,7 @@ KwargName = str
 Position = Iterable[Union[int, float]]
 KwargValue = Union[int, float, Position]
 RectPositionKwargs = dict[KwargName, KwargValue]
+Size = tuple[int, int]
 
 # Globals
 IMG_FOLDER_PATH = os.path.join('..', 'img')
@@ -37,6 +39,10 @@ def load_image(query: str, convert_alpha: Checkbox = True
             print(f"{__name__} load image {file_path}")
 
             return convert_image(img, convert_alpha)
+    else:
+        raise FileNotFoundError(
+            f"Could not find image filename containing '{query}'"
+        )
 
 
 def load_images(
@@ -48,7 +54,7 @@ def load_images(
         Loads images into a dictionary explicitly and/or using a query.
         {'img_name': Image, ...}
         You must specify filenames and / or provide a query. If no matches
-        are found, an empty dict is returned. You can optionally call
+        are found, raises FileNotFoundError. You can optionally call
         convert_alpha on all images with the convert_alpha flag. If called
         with convert_alpha=False, images will will be converted using .convert()
         rather than .convert_alpha()
@@ -56,11 +62,12 @@ def load_images(
     folder_path = IMG_FOLDER_PATH
     images = {}
 
-    for fn in filenames:
-        file_path = os.path.join(folder_path, fn)
-        img = pg.image.load(file_path)
-        img_name = fn.split('.')[0]
-        images[img_name] = convert_image(img, convert_alpha)
+    if filenames:
+        for fn in filenames:
+            file_path = os.path.join(folder_path, fn)
+            img = pg.image.load(file_path)
+            img_name = fn.split('.')[0]
+            images[img_name] = convert_image(img, convert_alpha)
 
     if query:
         for fn in os.listdir(folder_path):
@@ -72,19 +79,13 @@ def load_images(
 
     print(f"{__name__} load images {', '.join(k for k in images.keys())}")
 
-    return images
-
-
-def load_sprite_frames(sprite_name: str) -> deque[Image]:
-    """load the images that match a query into a deque and return the deque.
-    sprite_name should be the entire left half of each filename. For example, the
-    query 'startbutton' would load the following filenames: 'startbutton-clicked',
-    and 'startbutton-unclicked'
-    """
-    images: dict[str, Image] = load_images(query=sprite_name)
-    return deque(
-        images.values()
-    )
+    if images:
+        return images
+    else:
+        raise FileNotFoundError(f"Could not load any images."
+                                f"Could not locate filenames:\n"
+                                f"{filenames}\n"
+                                f"No results for query: {query}")
 
 
 def convert_image(image: Image, convert_alpha: Checkbox = True
@@ -97,7 +98,7 @@ def convert_image(image: Image, convert_alpha: Checkbox = True
             return image.convert_alpha()
         else:
             return image.convert()
-    except pg.error as e:
+    except pg.error:
         print(f"WARNING in src/{__name__}.py convert_image()\n"
               f"Could not convert {image}"
               )
@@ -127,26 +128,23 @@ def scale_image(
     return pg.transform.scale(image, (w, h))
 
 
-def make_all_same_size(images: Images):
+def make_all_same_size(images: Images) -> Images:
     """
     Take in a container of images and make them all the same size. The Images
     will take on the size which is most common among the given Images.
     """
-    def resize_images() -> Images:
-        for surf in images:
-            yield pg.transform.scale(surf, (w, h))
-
     # get most common size
     sizes = Counter(image.get_size() for image in images)
     w, h = sizes.most_common()[0][0]
 
-    return tuple( resize_images())
+    return tuple(pg.transform.scale(surf, (w, h)) for surf in images)
 
 
 def load_sounds(sound_names: Iterable[str]) -> dict[str, Sound]:
     """
         Loads sounds into a dictionary. You must specify sound names.
-         If no matches are found, an empty dict is returned.
+        (no need to specify filename. If no matches are found, an empty dict
+        is returned.
     """
     folder_path = AUDIO_FOLDER_PATH
     extension = '.wav'
@@ -161,16 +159,15 @@ def load_sounds(sound_names: Iterable[str]) -> dict[str, Sound]:
     return sounds
 
 
-def copy_rect(rect: pg.Rect, **positions_args: RectPositionKwargs):
-    """"""
-    pass
-
-
-class StaticImage:
+class StaticImage(pg.sprite.Sprite):
     """
     Represents a surface that has no movement/behavior used for background and
     foreground
     """
-    def __init__(self, image: Image):
+    def __init__(self,
+                 image: Image,
+                 **rect_position
+        ):
+        super().__init__()
         self.image = image
-        self.rect = self.image.get_rect()
+        self.rect = self.image.get_rect(**rect_position)
